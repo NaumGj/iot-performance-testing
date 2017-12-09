@@ -14,6 +14,8 @@ ADD . /app
 
 RUN mvn clean package
 
-ENV JAVA_ENV=PRODUCTION
+ARG mainClass
 
-CMD ["mvn", "exec:java", "-Dexec.mainClass=streams.Throughput"]
+ENV mainClass $mainClass
+
+CMD mvn exec:java -Dexec.mainClass=$mainClass

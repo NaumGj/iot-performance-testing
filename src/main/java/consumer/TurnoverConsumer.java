@@ -1,6 +1,7 @@
 package consumer;
 
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.Properties;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,19 +15,18 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.json.JSONObject;
 
 import constants.Const;
-import constants.Locations;
 import mqtt.MqttPublishClient;
 import mqtt.MqttPublishRunnable;
 
-public class MostFreqDrivenConsumer {
-
-	private static final String GROUP_ID = "freq";
-
+public class TurnoverConsumer {
+	
+	private static final String GROUP_ID = "turnover";
+	
 	private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
+	
 	public static void main(String[] argv) throws Exception{
-		MqttClient mqttClient = MqttPublishClient.setupMqttConnection(Const.MOST_FREQ_DRIVEN_ACCESS_TOKEN);
-		ConsumerThread consumerRunnable = new ConsumerThread(Const.MOST_FREQ_DRIVEN_TOPIC, GROUP_ID, mqttClient);
+		MqttClient mqttClient = MqttPublishClient.setupMqttConnection(Const.TURNOVER_ACCESS_TOKEN);
+		ConsumerThread consumerRunnable = new ConsumerThread(Const.TURNOVER_TOPIC, GROUP_ID, mqttClient);
 		consumerRunnable.start();
 		consumerRunnable.join();
 	}
@@ -43,8 +43,9 @@ public class MostFreqDrivenConsumer {
 			this.kafkaConsumer = new KafkaConsumer<String, String>(consumerProps);
 			this.kafkaConsumer.subscribe(Arrays.asList(topicName));
 		}
-
+		
 		public void run() {
+			LinkedList<Double> turnovers = new LinkedList<Double>();
 			String messageContent = new JSONObject().toString();
 			MqttPublishRunnable mqttPublishRunnable = new MqttPublishRunnable(this.mqttClient, messageContent);
 			scheduler.scheduleAtFixedRate(mqttPublishRunnable, 1, Const.MQTT_REPORT_FREQ, TimeUnit.SECONDS);
@@ -53,35 +54,36 @@ public class MostFreqDrivenConsumer {
 				while (true) {
 					ConsumerRecords<String, String> records = kafkaConsumer.poll(100);
 					for (ConsumerRecord<String, String> record : records) {
-						String[] values = record.value().split(";");
-						String[] first = values[0].split(",");
-						String[] second = values[1].split(",");
-						String[] third = values[2].split(",");
-
-						try {
-							messageContent = new JSONObject()
-									.put("mostFreqDriven1", Locations.locations.get(first[0]) + " - " + Locations.locations.get(first[1]))
-									.put("mostFreqDriven1Freq", first[2])
-									.put("mostFreqDriven2", Locations.locations.get(second[0]) + " - " + Locations.locations.get(second[1]))
-									.put("mostFreqDriven2Freq", second[2])
-									.put("mostFreqDriven3", Locations.locations.get(third[0]) + " - " + Locations.locations.get(third[1]))
-									.put("mostFreqDriven3Freq", third[2])
-									.toString();
-							mqttPublishRunnable.setMessageContent(messageContent);
-						} catch (ArrayIndexOutOfBoundsException e) {
-							System.out.println(e.getMessage());
+						while (turnovers.size() > 10) {
+							turnovers.removeLast();
 						}
+						turnovers.addFirst(Double.valueOf(record.value()));
+						
+						Double turnover = getCorrectTurnover(turnovers);
+						
+						messageContent = new JSONObject()
+								.put("turnover", turnover).toString();
+						mqttPublishRunnable.setMessageContent(messageContent);
 					}
 				}
 			} catch(WakeupException ex) {
 				System.out.println("Exception caught " + ex.getMessage());
-			} catch (Exception e) {
-				System.out.println("Exception: ");
-				e.printStackTrace();
 			} finally {
 				kafkaConsumer.close();
 				System.out.println("After closing KafkaConsumer...");
 			}
-		}		
+		}
+		
+		public Double getCorrectTurnover(LinkedList<Double> list) {
+			Double turnover = 0.0;
+			for (Double entry : list) {
+				if (entry > turnover) {
+					turnover = entry;
+				}
+			}
+			
+			return turnover;
+		}
 	}
 }
+

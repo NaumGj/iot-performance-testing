@@ -21,14 +21,6 @@ public class MqttPublishClient {
 			System.out.println("Connected");
 			
 			return mqttClient;
-//			System.out.println("Publishing message: " + content);
-//			MqttMessage message = new MqttMessage(content.getBytes());
-//			message.setQos(qos);
-//			sampleClient.publish(topic, message);
-//			System.out.println("Message published");
-//			sampleClient.disconnect();
-//			System.out.println("Disconnected");
-//			System.exit(0);
 		} catch(MqttException me) {
 			System.out.println("Reason: " + me.getReasonCode());
 			System.out.println("Message:  " + me.getMessage());
